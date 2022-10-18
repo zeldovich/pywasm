@@ -388,11 +388,48 @@ class LabelIndex(int):
         return LabelIndex(leb128.u.decode_reader(r)[0])
 
 
+class NameSection:
+    def __init__(self):
+        self.mod_name = ''
+        self.func_names = {}
+        self.local_names = {}
+
+    def __repr__(self):
+        return f'namesection({self.mod_name})'
+
+    @classmethod
+    def from_reader(cls, r: typing.BinaryIO):
+        o = NameSection()
+        while True:
+            subsection_id_byte = r.read(1)
+            if not subsection_id_byte:
+                break
+            subsection_id = ord(subsection_id_byte)
+            n = leb128.u.decode_reader(r)[0]
+            subsection_data = bytearray(r.read(n))
+            if len(subsection_data) != n:
+                # raise Exception('pywasm: unexpected end of subsection')
+                pass
+            sr = io.BytesIO(subsection_data)
+
+            if subsection_id == 0:
+                n = leb128.u.decode_reader(sr)[0]
+                self.mod_name = sr.read(n).decode()
+            if subsection_id == 1:
+                nvec = leb128.u.decode_reader(sr)[0]
+                for i in range(0, nvec):
+                    idx = FunctionIndex.from_reader(sr)
+                    n = leb128.u.decode_reader(sr)[0]
+                    name = sr.read(n).decode()
+                    o.func_names[idx] = name
+        return o
+
 class Custom:
     # custom ::= name byte∗
     def __init__(self):
         self.name: str = ''
         self.data: bytearray = bytearray()
+        self.namesec = None
 
     def __repr__(self):
         return f'custom({self.name})'
@@ -402,7 +439,12 @@ class Custom:
         o = Custom()
         n = leb128.u.decode_reader(r)[0]
         o.name = r.read(n).decode()
-        o.data = bytearray(r.read(-1))
+        if o.name == 'name':
+            o.namesec = NameSection.from_reader(r)
+            ## The spec says we should ignore errors in custom sections
+            r.read(-1)
+        else:
+            o.data = bytearray(r.read(-1))
         return o
 
 
@@ -1005,9 +1047,10 @@ class Function:
         self.type_index: TypeIndex = TypeIndex()
         self.local_list: typing.List[ValueType] = []
         self.expr: Expression = Expression()
+        self.name = None
 
     def __repr__(self):
-        return f'function({self.type_index}, {self.local_list})'
+        return f'function({self.name}, {self.type_index}, {self.local_list})'
 
 
 class Module:
@@ -1042,6 +1085,7 @@ class Module:
         self.start: typing.Optional[StartFunction] = None
         self.import_list: typing.List[Import] = []
         self.export_list: typing.List[Export] = []
+        self.func_names = {}
 
     def __repr__(self):
         return f'module({self.section_list})'
@@ -1064,6 +1108,7 @@ class Module:
         element_section = ElementSection()
         code_section = CodeSection()
         data_section = DataSection()
+        name_section = None
 
         mod = Module()
         while True:
@@ -1081,6 +1126,8 @@ class Module:
                 custom_section = CustomSection.from_reader(section_reader)
                 mod.section_list.append(custom_section)
                 log.debugln(custom_section)
+                if custom_section.custom.name == 'name':
+                    mod.func_names = custom_section.custom.namesec.func_names
             if section_id == convention.type_section:
                 type_section = TypeSection.from_reader(section_reader)
                 mod.section_list.append(type_section)

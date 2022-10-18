@@ -170,16 +170,18 @@ class ModuleInstance:
         self.memory_addr_list: typing.List[MemoryAddress] = []
         self.global_addr_list: typing.List[GlobalAddress] = []
         self.export_list: typing.List[ExportInstance] = []
+        self.func_names = {}
 
 
 class WasmFunc:
-    def __init__(self, function_type: binary.FunctionType, module: ModuleInstance, code: binary.Function):
+    def __init__(self, function_type: binary.FunctionType, module: ModuleInstance, code: binary.Function, name):
         self.type = function_type
         self.module = module
         self.code = code
+        self.name = name
 
     def __repr__(self):
-        return f'wasm_func({self.type})'
+        return f'wasm_func({self.name}, {self.type})'
 
 
 class HostFunc:
@@ -301,10 +303,12 @@ class Store:
         # For compatibility with older 0.4.x versions
         self.mems = self.memory_list
 
+        self.func_names = {}
+
     def allocate_wasm_function(self, module: ModuleInstance, function: binary.Function) -> FunctionAddress:
         function_address = FunctionAddress(len(self.function_list))
         function_type = module.type_list[function.type_index]
-        wasmfunc = WasmFunc(function_type, module, function)
+        wasmfunc = WasmFunc(function_type, module, function, self.func_names.get(function_address))
         self.function_list.append(wasmfunc)
         return function_address
 
@@ -2058,6 +2062,8 @@ class Machine:
         extern_value_list: typing.List[ExternValue],
         global_values: typing.List[Value],
     ):
+        self.store.func_names = module.func_names
+
         # Let funcaddr be the list of function addresses extracted from externval, concatenated with funcaddr
         # Let tableaddr be the list of table addresses extracted from externval, concatenated with tableaddr
         # Let memaddr be the list of memory addresses extracted from externval, concatenated with memaddr
