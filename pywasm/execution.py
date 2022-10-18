@@ -479,7 +479,9 @@ class Configuration:
                 arity=len(function.type.rets.data),
             )
             self.set_frame(frame)
-            return self.exec()
+            v = self.exec()
+            log.debugln(f'return {v} from {function}')
+            return v
         if isinstance(function, HostFunc):
             r = function.hostcode(self.store, *[e.val() for e in function_args])
             l = len(function.type.rets.data)
@@ -521,6 +523,8 @@ class ArithmeticLogicUnit:
             log.println('|', i)
         func = _INSTRUCTION_TABLE[i.opcode]
         func(config, i)
+        if log.lvl > 0:
+            log.println('>>>', config.stack.data)
 
     @staticmethod
     def unreachable(config: Configuration, i: binary.Instruction):
@@ -738,6 +742,8 @@ class ArithmeticLogicUnit:
         addr = config.stack.pop().i32() + offset
         if addr < 0 or addr + size > len(memory.data):
             raise Exception('pywasm: out of bounds memory access')
+        if log.lvl > 0:
+            log.println("MEMORY LOAD:", memory_addr, addr, size, memory.data[addr:addr+size])
         return memory.data[addr:addr + size]
 
     @staticmethod
