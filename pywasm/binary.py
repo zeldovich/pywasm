@@ -212,13 +212,15 @@ class BlockType(int):
         return BlockType(ord(r.read(1)))
 
 
+icache = {}
+
 class Instruction:
     # Instructions are encoded by opcodes. Each opcode is represented by a single byte, and is followed by the
     # instruction's immediate arguments, where present. The only exception are structured control instructions, which
     # consist of several opcodes bracketing their nested instruction sequences.
 
-    def __init__(self):
-        self.opcode: int = 0x00
+    def __init__(self, opcode = 0x00):
+        self.opcode: int = opcode
         self.args: typing.List[typing.Any] = []
 
     def __repr__(self):
@@ -226,99 +228,115 @@ class Instruction:
 
     @classmethod
     def from_reader(cls, r: typing.BinaryIO):
-        o = Instruction()
-        o.opcode: int = ord(r.read(1))
-        o.args = []
-        if o.opcode in [
-            instruction.block,
-            instruction.loop,
-            instruction.if_,
-        ]:
-            block_type = BlockType.from_reader(r)
-            o.args = [block_type]
-            return o
-        if o.opcode in [
-            instruction.br,
-            instruction.br_if,
-        ]:
-            o.args = [LabelIndex(leb128.u.decode_reader(r)[0])]
-            return o
-        if o.opcode == instruction.br_table:
-            n = leb128.u.decode_reader(r)[0]
-            a = [LabelIndex(leb128.u.decode_reader(r)[0]) for _ in range(n)]
-            b = LabelIndex(leb128.u.decode_reader(r)[0])
-            o.args = [a, b]
-            return o
-        if o.opcode == instruction.call:
-            o.args = [FunctionIndex(leb128.u.decode_reader(r)[0])]
-            return o
-        if o.opcode == instruction.call_indirect:
-            i = TypeIndex(leb128.u.decode_reader(r)[0])
-            n = ord(r.read(1))
-            o.args = [i, n]
-            return o
-        if o.opcode in [
-            instruction.get_local,
-            instruction.set_local,
-            instruction.tee_local,
-        ]:
-            o.args = [LocalIndex(leb128.u.decode_reader(r)[0])]
-            return o
-        if o.opcode in [
-            instruction.get_global,
-            instruction.set_global,
-        ]:
-            o.args = [GlobalIndex(leb128.u.decode_reader(r)[0])]
-            return o
-        if o.opcode in [
-            instruction.i32_load,
-            instruction.i64_load,
-            instruction.f32_load,
-            instruction.f64_load,
-            instruction.i32_load8_s,
-            instruction.i32_load8_u,
-            instruction.i32_load16_s,
-            instruction.i32_load16_u,
-            instruction.i64_load8_s,
-            instruction.i64_load8_u,
-            instruction.i64_load16_s,
-            instruction.i64_load16_u,
-            instruction.i64_load32_s,
-            instruction.i64_load32_u,
-            instruction.i32_store,
-            instruction.i64_store,
-            instruction.f32_store,
-            instruction.f64_store,
-            instruction.i32_store8,
-            instruction.i32_store16,
-            instruction.i64_store8,
-            instruction.i64_store16,
-            instruction.i64_store32,
-        ]:
-            o.args = [leb128.u.decode_reader(r)[0], leb128.u.decode_reader(r)[0]]
-            return o
-        if o.opcode in [
-            instruction.current_memory,
-            instruction.grow_memory
-        ]:
-            n = ord(r.read(1))
-            o.args = [n]
-            return o
-        if o.opcode == instruction.i32_const:
-            o.args = [leb128.i.decode_reader(r)[0]]
-            return o
-        if o.opcode == instruction.i64_const:
-            o.args = [leb128.i.decode_reader(r)[0]]
-            return o
-        if o.opcode == instruction.f32_const:
-            # https://stackoverflow.com/questions/47961537/webassembly-f32-const-nan0x200000-means-0x7fa00000-or-0x7fe00000
-            # python misinterpret 0x7fa00000 as 0x7fe00000, when encapsulate as built-in float type.
-            o.args = [num.LittleEndian.i32(r.read(4))]
-            return o
-        if o.opcode == instruction.f64_const:
-            o.args = [num.LittleEndian.i64(r.read(8))]
-            return o
-        return o
+        op: int = ord(r.read(1))
+        match op:
+            case instruction.block | instruction.loop | instruction.if_:
+                block_type = BlockType.from_reader(r)
+                if (op, block_type) in icache:
+                    return icache[(op, block_type)]
+                o = Instruction(op)
+                o.args = [block_type]
+                icache[(op, block_type)] = o
+                return o
+            case instruction.br | instruction.br_if:
+                a = LabelIndex(leb128.u.decode_reader(r)[0])
+                if (op, a) in icache:
+                    return icache[(op, a)]
+                o = Instruction(op)
+                o.args = [a]
+                icache[(op, a)] = o
+                return o
+            case instruction.br_table:
+                o = Instruction(op)
+                n = leb128.u.decode_reader(r)[0]
+                a = [LabelIndex(leb128.u.decode_reader(r)[0]) for _ in range(n)]
+                b = LabelIndex(leb128.u.decode_reader(r)[0])
+                o.args = [a, b]
+                return o
+            case instruction.call:
+                o = Instruction(op)
+                o.args = [FunctionIndex(leb128.u.decode_reader(r)[0])]
+                return o
+            case instruction.call_indirect:
+                o = Instruction(op)
+                i = TypeIndex(leb128.u.decode_reader(r)[0])
+                n = ord(r.read(1))
+                o.args = [i, n]
+                return o
+            case instruction.get_local | instruction.set_local | instruction.tee_local:
+                a = LocalIndex(leb128.u.decode_reader(r)[0])
+                if (op, a) in icache:
+                    return icache[(op, a)]
+                o = Instruction(op)
+                o.args = [a]
+                icache[(op, a)] = o
+                return o
+            case instruction.get_global | instruction.set_global:
+                a = GlobalIndex(leb128.u.decode_reader(r)[0])
+                if (op, a) in icache:
+                    return icache[(op, a)]
+                o = Instruction(op)
+                o.args = [a]
+                icache[(op, a)] = o
+                return o
+            case instruction.i32_load | instruction.i64_load | \
+                 instruction.f32_load | instruction.f64_load | \
+                 instruction.i32_load8_s | instruction.i32_load8_u | \
+                 instruction.i32_load16_s | instruction.i32_load16_u | \
+                 instruction.i64_load8_s | instruction.i64_load8_u | \
+                 instruction.i64_load16_s | instruction.i64_load16_u | \
+                 instruction.i64_load32_s | instruction.i64_load32_u | \
+                 instruction.i32_store | instruction.i64_store | \
+                 instruction.f32_store | instruction.f64_store | \
+                 instruction.i32_store8 | instruction.i32_store16 | \
+                 instruction.i64_store8 | instruction.i64_store16 | \
+                 instruction.i64_store32:
+                a = leb128.u.decode_reader(r)[0]
+                b = leb128.u.decode_reader(r)[0]
+                if (op, a, b) in icache:
+                    return icache[(op, a, b)]
+                o = Instruction(op)
+                o.args = [a, b]
+                icache[(op, a, b)] = o
+                return o
+            case instruction.current_memory | instruction.grow_memory:
+                o = Instruction(op)
+                n = ord(r.read(1))
+                o.args = [n]
+                return o
+            case instruction.i32_const:
+                a = leb128.i.decode_reader(r)[0]
+                if (op, a) in icache:
+                    return icache[(op, a)]
+                o = Instruction(op)
+                o.args = [a]
+                icache[(op, a)] = o
+                return o
+            case instruction.i64_const:
+                a = leb128.i.decode_reader(r)[0]
+                if (op, a) in icache:
+                    return icache[(op, a)]
+                o = Instruction(op)
+                o.args = [a]
+                icache[(op, a)] = o
+                return o
+            case instruction.f32_const:
+                o = Instruction(op)
+                # https://stackoverflow.com/questions/47961537/webassembly-f32-const-nan0x200000-means-0x7fa00000-or-0x7fe00000
+                # python misinterpret 0x7fa00000 as 0x7fe00000, when encapsulate as built-in float type.
+                o.args = [num.LittleEndian.i32(r.read(4))]
+                return o
+            case instruction.f64_const:
+                o = Instruction(op)
+                o.args = [num.LittleEndian.i64(r.read(8))]
+                return o
+            case _:
+                if op in icache:
+                    return icache[op]
+                o = Instruction(op)
+                o.args = []
+                icache[op] = o
+                return o
 
 # ======================================================================================================================
 # Binary Format Modules
