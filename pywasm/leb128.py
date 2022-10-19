@@ -30,13 +30,15 @@ class _U:
 
     @staticmethod
     def decode_reader(r: typing.BinaryIO) -> (int, int):
-        a = bytearray()
+        res = 0
+        i = 0
         while True:
             b = ord(r.read(1))
-            a.append(b)
+            res = res + ((b & 0x7f) << (i * 7))
+            i = i + 1
             if (b & 0x80) == 0:
                 break
-        return _U.decode(a), len(a)
+        return res, i
 
 
 class _I:
