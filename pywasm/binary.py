@@ -254,8 +254,12 @@ class Instruction:
                 o.args = [a, b]
                 return o
             case instruction.call:
+                a = FunctionIndex(leb128.u.decode_reader(r)[0])
+                if (op, a) in icache:
+                    return icache[(op, a)]
                 o = Instruction(op)
-                o.args = [FunctionIndex(leb128.u.decode_reader(r)[0])]
+                o.args = [a]
+                icache[(op, a)] = o
                 return o
             case instruction.call_indirect:
                 o = Instruction(op)
@@ -300,9 +304,12 @@ class Instruction:
                 icache[(op, a, b)] = o
                 return o
             case instruction.current_memory | instruction.grow_memory:
-                o = Instruction(op)
                 n = ord(r.read(1))
+                if (op, n) in icache:
+                    return icache[(op, n)]
+                o = Instruction(op)
                 o.args = [n]
+                icache[(op, n)] = o
                 return o
             case instruction.i32_const:
                 a = leb128.i.decode_reader(r)[0]
