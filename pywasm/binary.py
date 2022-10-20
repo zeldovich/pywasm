@@ -224,11 +224,7 @@ class Instruction:
         self.args: typing.List[typing.Any] = []
 
     def __repr__(self):
-        if self.opcode in instruction.opcode:
-            i = instruction.opcode[self.opcode][0]
-        else:
-            i = '0x%2x' % self.opcode
-        return f'{i} {self.args}'
+        return f'{instruction.opcode[self.opcode][0]} {self.args}'
 
     @classmethod
     def from_reader(cls, r: typing.BinaryIO):
