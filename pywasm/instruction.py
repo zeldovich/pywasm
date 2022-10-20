@@ -1,10 +1,15 @@
 import typing
 
 opcode: typing.Dict[int, typing.Tuple[str]] = {}
+opcode_misc: typing.Dict[int, typing.Tuple[str]] = {}
 
 
 def op(code: int, name: str):
     opcode[code] = [name]
+    return code
+
+def misc_op(code: int, name: str):
+    opcode_misc[code] = [name]
     return code
 
 
@@ -185,3 +190,7 @@ i32_reinterpret_f32 = op(0xbc, 'i32.reinterpret_f32')
 i64_reinterpret_f64 = op(0xbd, 'i64.reinterpret_f64')
 f32_reinterpret_i32 = op(0xbe, 'f32.reinterpret_i32')
 f64_reinterpret_i64 = op(0xbf, 'f64.reinterpret_i64')
+# other
+misc = op(0xfc, 'misc')
+mem_copy = misc_op(0x0a, 'memory.copy')
+mem_fill = misc_op(0x0b, 'memory.fill')

@@ -337,7 +337,29 @@ class Instruction:
                 o = Instruction(op)
                 o.args = [num.LittleEndian.i64(r.read(8))]
                 return o
+            case instruction.misc:
+                subop = leb128.u.decode_reader(r)[0]
+                match subop:
+                    case instruction.mem_copy:
+                        srcmem = ord(r.read(1))
+                        dstmem = ord(r.read(1))
+                        if srcmem != 0 or dstmem != 0:
+                            raise Exception("memory.copy non-zero memories")
+                        o = Instruction(op)
+                        o.args = [subop]
+                        return o
+                    case instruction.mem_fill:
+                        dstmem = ord(r.read(1))
+                        if dstmem != 0:
+                            raise Exception("memory.fill non-zero memory")
+                        o = Instruction(op)
+                        o.args = [subop]
+                        return o
+                    case _:
+                        raise Exception("unsupported misc opcode", subop)
             case _:
+                if op not in instruction.opcode:
+                    raise Exception("unsupported opcode", op)
                 if op in icache:
                     return icache[op]
                 o = Instruction(op)

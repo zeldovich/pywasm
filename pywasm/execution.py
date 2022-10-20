@@ -885,6 +885,33 @@ class ArithmeticLogicUnit:
             config.stack.append(Value.from_i32(-1))
 
     @staticmethod
+    def misc(config: Configuration, i: binary.Instruction):
+        match i.args[0]:
+            case instruction.mem_copy:
+                memory_addr = config.frame.module.memory_addr_list[0]
+                memory = config.store.memory_list[memory_addr]
+                n = config.stack.pop().i32()
+                src = config.stack.pop().i32()
+                dst = config.stack.pop().i32()
+                if src < 0 or src + n > len(memory.data):
+                    raise Exception('pywasm: out of bounds memory access')
+                if dst < 0 or dst + n > len(memory.data):
+                    raise Exception('pywasm: out of bounds memory access')
+                memory.data[dst:dst+n] = memory.data[src:src+n]
+            case instruction.mem_fill:
+                memory_addr = config.frame.module.memory_addr_list[0]
+                memory = config.store.memory_list[memory_addr]
+                n = config.stack.pop().i32()
+                b = config.stack.pop().data[0]
+                dst = config.stack.pop().i32()
+                if dst < 0 or dst + n > len(memory.data):
+                    raise Exception('pywasm: out of bounds memory access')
+                for o in range(n):
+                    memory.data[dst+o] = b
+            case _:
+                raise Exception("unsupported misc op", i.args[0])
+
+    @staticmethod
     def i32_const(config: Configuration, i: binary.Instruction):
         config.stack.append(Value.from_i32(i.args[0]))
 
@@ -1958,6 +1985,7 @@ def _make_instruction_table():
     table[instruction.i64_reinterpret_f64] = ArithmeticLogicUnit.i64_reinterpret_f64
     table[instruction.f32_reinterpret_i32] = ArithmeticLogicUnit.f32_reinterpret_i32
     table[instruction.f64_reinterpret_i64] = ArithmeticLogicUnit.f64_reinterpret_i64
+    table[instruction.misc] = ArithmeticLogicUnit.misc
 
     return table
 
