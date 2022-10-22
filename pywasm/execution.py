@@ -825,6 +825,8 @@ class ArithmeticLogicUnit:
         addr = config.stack.pop().i32() + offset
         if addr < 0 or addr + size > len(memory.data):
             raise Exception('pywasm: out of bounds memory access')
+        if log.lvl > 0:
+            log.println("MEMORY STORE:", memory_addr, addr, size, r.data[0:size])
         memory.data[addr:addr + size] = r.data[0:size]
 
     @staticmethod
